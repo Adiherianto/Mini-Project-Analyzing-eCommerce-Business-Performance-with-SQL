@@ -1,0 +1,225 @@
+TASK 1 - ERD AND DATA PREPARATION
+CODE : 
+1.	Customer_dataset
+SELECT * FROM customer_dataset LIMIT 0  (untuk mengetahui kolom pada tabel)
+SELECT COUNT(*) FROM customer_dataset (untuk mengetahui jumlah baris)
+
+2.	Geolocation_dataset
+SELECT * FROM geolocation_dataset LIMIT 0  (untuk mengetahui kolom pada tabel)
+SELECT COUNT(*) FROM geolocation_dataset (untuk mengetahui jumlah baris)
+
+3.	Order_item_dataset
+SELECT * FROM order_item_dataset LIMIT 0  (untuk mengetahui kolom pada tabel)
+SELECT COUNT(*) FROM order_item_dataset (untuk mengetahui jumlah baris)
+
+4.	Order_payment_dataset
+SELECT * FROM order_payment_dataset LIMIT 0  (untuk mengetahui kolom pada tabel)
+SELECT COUNT(*) FROM order_payment_dataset  (untuk mengetahui jumlah baris)
+
+5.	Order_reviews_dataset
+SELECT * FROM order_reviews_dataset LIMIT 0  (untuk mengetahui kolom pada tabel)
+SELECT COUNT(*) FROM order_reviews_dataset  (untuk mengetahui jumlah baris)
+
+6.	Orders_dataset
+SELECT * FROM orders_dataset LIMIT 0  (untuk mengetahui kolom pada tabel)
+SELECT COUNT(*) FROM orders_dataset  (untuk mengetahui jumlah baris)
+
+7.	Product_dataset
+SELECT * FROM product_dataset LIMIT 0  (untuk mengetahui kolom pada tabel)
+SELECT COUNT(*) FROM product_dataset  (untuk mengetahui jumlah baris)
+
+8.	Seler_dataset
+SELECT * FROM seler_dataset LIMIT 0  (untuk mengetahui kolom pada tabel)
+SELECT COUNT(*) FROM seler_dataset  (untuk mengetahui jumlah baris)
+
+
+
+TASK 2 : ANNUAL CUSTOMER ACTIVITY GROWTH ANALYSIS 
+CODE : 
+----- SOAL NO 1 ------
+SELECT tahun, ROUND(AVG(monthly_active_user), 0) AS MAU
+FROM(SELECT
+		DATE_PART('year', orders.order_purchase_timestamp) AS tahun,
+		DATE_PART('month', orders.order_purchase_timestamp) AS bulan,
+		COUNT(DISTINCT customers.customer_unique_id) AS monthly_active_user
+	FROM
+		orders_dataset orders
+	JOIN customer_dataset customers
+	ON customers.customer_id = orders.customer_id
+	GROUP BY 1,2
+) AS count_mau
+GROUP BY 1;
+RESULT : 
+--- SOAL NO 2---- 
+SELECT DATE_PART('year', first_order) AS tahun, COUNT(*) AS total_customers
+FROM
+(SELECT customers.customer_unique_id, MIN(orders.order_purchase_timestamp) AS first_order 
+ FROM customer_dataset customers
+	 JOIN orders_dataset orders ON customers.customer_id = orders.customer_id
+	 GROUP BY 1)
+	 count_first_order
+GROUP BY 1
+ORDER BY tahun;
+---- SOAL NO. 3 -----
+SELECT tahun, COUNT(customer_unique_id) AS total_customers_who_do_repeat_order
+FROM
+(SELECT 
+ DATE_PART('year', orders.order_purchase_timestamp) AS tahun, 
+ customers.customer_unique_id, 
+ count(*) AS total_orders
+ FROM orders_dataset orders
+ JOIN customer_dataset customers ON orders.customer_id = customers.customer_id
+ GROUP BY 1,2
+ HAVING count(*) > 1
+) 
+repeat_total_order
+GROUP BY 1
+ORDER BY 1;
+------ SOAL NO.4 ------
+SELECT tahun, ROUND(AVG(total_orders),1) AS average_order
+FROM(SELECT date_part('year', orders.order_purchase_timestamp) AS tahun, customers.customer_unique_id,
+	 count(*) AS total_orders
+	 FROM orders_dataset orders
+	 JOIN customer_dataset customers
+	 ON customers.customer_id = orders.customer_id
+	 GROUP BY 1,2) AS count_total_orders
+GROUP BY 1
+ORDER BY 1;
+------ SOAL NO.5 -------
+WITH hitung_MAU AS
+(SELECT tahun, ROUND(AVG(monthly_active_user), 0) AS MAU
+ FROM(SELECT date_part('year', orders.order_purchase_timestamp) AS tahun,
+	  DATE_PART('month', orders.order_purchase_timestamp) AS bulan,
+	  COUNT(DISTINCT customers.customer_unique_id) AS monthly_active_user
+	  FROM orders_dataset orders JOIN customer_dataset customers ON customers.customer_id = orders.customer_id
+	  GROUP BY 1,2) AS count_MAU GROUP BY 1),
+	  
+	  hitung_new_customers AS
+	  (SELECT DATE_PART('year', first_order_time) AS tahun, COUNT(*) AS total_customers
+	   FROM(SELECT customers.customer_unique_id, MIN(orders.order_purchase_timestamp) AS first_order_time
+			FROM customer_dataset customers
+			JOIN orders_dataset orders ON customers.customer_id = orders.customer_id
+			GROUP BY 1) count_first_order 
+	   GROUP BY 1), 
+	   hitung_repeat_order AS 
+	   (SELECT tahun, COUNT(customer_unique_id) AS total_repeat_customers
+		FROM(SELECT date_part('year', orders.order_purchase_timestamp) AS tahun, 
+			 customers.customer_unique_id, count(*) AS total_orders 
+			 FROM orders_dataset orders 
+			 JOIN customer_dataset customers ON orders.customer_id = customers.customer_id
+			 GROUP BY 1,2
+			 HAVING count(*) > 1) 
+		total_repeat_order 
+		GROUP BY 1),
+		
+		hitung_average_orders_customer AS 
+		(SELECT tahun, ROUND(AVG(total_orders),2) AS average_order
+		 FROM(SELECT DATE_PART('year', orders.order_purchase_timestamp) AS tahun, customers.customer_unique_id,
+			  count(*) AS total_orders 
+			  FROM orders_dataset orders
+			  JOIN customer_dataset customers ON customers.customer_id = orders.customer_id
+			  GROUP BY 1,2) AS count_total_orders
+		 GROUP BY 1
+		)
+		SELECT mau.tahun, mau.MAU, cal_new_customers.total_customers, cal_repeat_orders.total_repeat_customers, cal_avg_customers.average_order
+FROM
+	hitung_mau mau
+JOIN hitung_new_customers cal_new_customers ON mau.tahun = cal_new_customers.tahun
+JOIN hitung_repeat_order cal_repeat_orders ON mau.tahun = cal_repeat_orders.tahun
+JOIN hitung_average_orders_customer cal_avg_customers ON mau.tahun = cal_avg_customers.tahun
+
+TASK 3 : ANNUAL PRODUCT CATEGORY QUALITY ANALYSIS
+CODE : 
+----- SOAL NO.1 -----
+CREATE TABLE total_revenue_per_year AS
+SELECT date_part('year', orders.order_purchase_timestamp) AS year,
+SUM(revenue_order) AS revenue 
+FROM(SELECT order_id, SUM(price+freight_value) AS revenue_order
+	 FROM order_item_dataset
+	 GROUP BY 1) 
+	 cal_revenue_order
+	 JOIN orders_dataset AS orders ON cal_revenue_order.order_id = orders.order_id
+	 WHERE	orders.order_status = 'delivered'
+	 GROUP BY 1
+	 ORDER BY 1;
+
+SELECT * FROM total_revenue_per_year;
+--- SOAL NO. 2 ----
+CREATE TABLE total_cancel_order_per_year AS
+SELECT DATE_PART('year', order_purchase_timestamp) AS year, 
+COUNT(*) AS total_cancel_order
+FROM orders_dataset
+WHERE order_status = 'canceled'
+GROUP BY 1;
+
+SELECT * FROM total_cancel_order_per_year
+----- SOAL NO.3 ------
+CREATE TABLE the_most_valuable_product AS
+SELECT year, product_category_name, revenue_product
+FROM(SELECT DATE_PART('year', orders.order_purchase_timestamp) AS year,
+	 products.product_category_name,
+	 SUM(order_items.price + order_items.freight_value) AS revenue_product,
+	 RANK() OVER (PARTITION BY date_part('year', orders.order_purchase_timestamp) 
+				  ORDER BY SUM(order_items.price+order_items.freight_value) DESC) AS the_rank
+	 FROM order_item_dataset AS order_items
+	 JOIN orders_dataset AS orders ON order_items.order_id = orders.order_id
+	 JOIN product_dataset AS products ON order_items.product_id = products.product_id
+	 WHERE orders.order_status = 'delivered'
+	 GROUP BY 1,2) AS cal_revenue_product
+WHERE the_rank = 1;
+
+SELECT * FROM the_most_valuable_product
+------ SOAL NO.4 -------
+CREATE TABLE most_canceled_products AS
+SELECT year, product_category_name,	number_of_canceled_products
+FROM(SELECT date_part('year', orders.order_purchase_timestamp) AS year,
+	 products.product_category_name,
+	 COUNT(*) AS number_of_canceled_products,
+	 RANK() OVER (PARTITION BY date_part('year', orders.order_purchase_timestamp) 
+				  ORDER BY COUNT(*) DESC) AS the_rankk
+	 FROM
+	 order_item_dataset AS order_item
+	 JOIN orders_dataset AS orders ON order_item.order_id = orders.order_id
+	 JOIN product_dataset AS products ON order_item.product_id = products.product_id
+	 WHERE orders.order_status = 'canceled'
+	 GROUP BY 1,2
+) 
+AS cal_total_revenue_of_cancel_product
+WHERE the_rankk = 1;
+
+SELECT * FROM most_canceled_products
+----- SOAL NO. 5-----
+SELECT a.year, a.revenue AS total_revenue,
+b.total_cancel_order AS number_of_cancel_order,
+c.product_category_name AS top_category_product, 
+c.revenue_product AS revenue_of_top_product,
+d.product_category_name AS the_most_canceled_product,
+d.number_of_canceled_products AS number_of_canceled_product
+FROM total_revenue_company_per_year AS a
+JOIN total_cancel_order_per_year b ON a.year = b.year
+JOIN the_most_valuable_product  c ON a.year = c.year
+JOIN most_canceled_products d ON a.year = d.year;
+
+TASK 4 : ANNUAL PAYMENT TYPE USAGE ANALYSIS 
+CODE :
+----- SOAL NO.1 ------
+SELECT payment_type, COUNT(*) AS total_users
+FROM order_payment_dataset
+GROUP BY 1
+ORDER BY 2 DESC;
+---- SOAL NO.2 ------
+WITH count_payment_type AS 
+(SELECT date_part('year', orders.order_purchase_timestamp) AS year,
+ order_payment.payment_type,
+ COUNT(*) AS total_users
+ FROM order_payment_dataset AS order_payment
+ JOIN orders_dataset AS orders ON order_payment.order_id = orders.order_id
+ GROUP BY 1,2
+)
+SELECT payment_type, 
+sum(case when year = '2016' then total_users else 0 end) as "2016",
+sum(case when year = '2017' then total_users else 0 end) as "2017",
+sum(case when year = '2018' then total_users else 0 end) as "2018"
+FROM count_payment_type
+GROUP BY 1;
+
